@@ -87,3 +87,22 @@ export const deleteBanner = async (req, res) => {
     res.status(500).json({ error: "Server error while deleting banner" });
   }
 };
+
+export const toggleBanner = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const banner = await Banner.findById(req.params.id);
+
+    if (!banner) {
+      return res.status(404).json({ error: "Banner not found" });
+    }
+
+    banner.isActive = !banner.isActive;
+    await banner.save();
+
+    res.status(200).json({ banner });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to toggle banner status" });
+  }
+};
+

@@ -1,13 +1,21 @@
+import mongoose from "mongoose";
 import Address from "../models/Address.model.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────
-const handleValidationError = (err, res) => {
+const sendValidationError = (err, res) => {
   if (err.name === "ValidationError") {
     const messages = Object.values(err.errors).map((e) => e.message);
     return res.status(400).json({ error: messages.join(", ") });
   }
-  console.error(err);
+  console.error("Address controller error:",err);
   return res.status(500).json({ error: err.message || "Server error" });
+};
+
+const clearOtherDefaults = async (userId, exceptId) => {
+  await Address.updateMany(
+    { user: userId, _id: { $ne: exceptId } },
+    { $set: { isDefault: false } }
+  );
 };
 
 // ──────────────────────────────────────────────────────────────────────
@@ -43,28 +51,32 @@ export const createAddress = async (req, res) => {
     if (!city?.trim())     missing.push("city");
     if (!state?.trim())    missing.push("state");
     if (!pincode)          missing.push("pincode");
-    if (missing.length) return res.status(400).json({ error: `Missing required fields: ${missing.join(", ")}` });
-
+    if (missing.length) {
+        return res.status(400).json({ error: `Missing required fields: ${missing.join(", ")}` });
+    }
     // Auto-set as default if user has no addresses yet
     const count = await Address.countDocuments({ user: req.user._id });
     const isDefault = count === 0;
 
-    const address = new Address({
-      user: req.user._id,
-      label:    label    || "Home",
-      fullName: fullName.trim(),
-      phone:    phone.replace(/\D/g, ""),
-      street:   street.trim(),
-      city:     city.trim(),
-      state:    state.trim(),
-      pincode:  pincode.toString(),
+    if (isDefault) {
+      await clearOtherDefaults(req.user._id, new mongoose.Types.ObjectId());
+    }
+
+    const address = await Address.create({
+      user:      req.user._id,
+      label:     label    || "Home",
+      fullName:  fullName.trim(),
+      phone:     phone.toString().replace(/\D/g, ""),
+      street:    street.trim(),
+      city:      city.trim(),
+      state:     state.trim(),
+      pincode:   pincode.toString().replace(/\D/g, ""),
       isDefault,
     });
-
-    await address.save();
-    res.status(201).json({ message: "Address saved", address });
+ 
+    res.status(201).json({ message: "Address saved successfully", address });
   } catch (err) {
-    handleValidationError(err, res);
+    sendValidationError(err, res);
   }
 };
 
@@ -81,16 +93,16 @@ export const updateAddress = async (req, res) => {
     const { label, fullName, phone, street, city, state, pincode } = req.body;
     if (label)    address.label    = label;
     if (fullName) address.fullName = fullName.trim();
-    if (phone)    address.phone    = phone.replace(/\D/g, "");
+    if (phone)    address.phone    = phone.toString().replace(/\D/g, "");
     if (street)   address.street   = street.trim();
     if (city)     address.city     = city.trim();
     if (state)    address.state    = state.trim();
-    if (pincode)  address.pincode  = pincode.toString();
+    if (pincode)  address.pincode  = pincode.toString().replace(/\D/g, "");
 
     await address.save();
     res.json({ message: "Address updated", address });
   } catch (err) {
-    handleValidationError(err, res);
+    sendValidationError(err, res);
   }
 };
 
@@ -109,7 +121,8 @@ export const deleteAddress = async (req, res) => {
     // If deleted address was default → promote the newest remaining one
     if (wasDefault) {
       const next = await Address.findOne({ user: req.user._id }).sort({ createdAt: -1 });
-      if (next) { next.isDefault = true; await next.save(); }
+      if (next) { await Address.updateOne({ _id: next._id}, {$set: { isDefault: true }  });
+     }
     }
 
     res.json({ message: "Address deleted" });
@@ -127,11 +140,15 @@ export const setDefaultAddress = async (req, res) => {
     const address = await Address.findOne({ _id: req.params.id, user: req.user._id });
     if (!address) return res.status(404).json({ error: "Address not found" });
 
-    // Unset all others first
-    await Address.updateMany({ user: req.user._id }, { $set: { isDefault: false } });
-
-    address.isDefault = true;
-    await address.save();
+    
+    // Step 1: unset all others via updateMany (bypasses pre-save)
+    await clearOtherDefaults(req.user._id, address._id);
+ 
+    // Step 2: set this one via updateOne (also bypasses pre-save)
+    await Address.updateOne({ _id: address._id }, { $set: { isDefault: true } });
+ 
+    // Return the freshly updated document
+    const updated = await Address.findById(address._id).lean();
 
     res.json({ message: "Default address updated", address });
   } catch (err) {

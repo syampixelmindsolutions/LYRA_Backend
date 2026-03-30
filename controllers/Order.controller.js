@@ -267,6 +267,9 @@ export const adminGetAllOrders = async (req, res) => {
       orderNumber: "LYR" + o._id.toString().slice(-8).toUpperCase(),
       customer:    o.user?.fullName || "Unknown",
       email:       o.user?.email   || "",
+        
+      itemCount:   Array.isArray(o.items) ? o.items.length : 0,
+
     }));
 
     res.json(enriched);

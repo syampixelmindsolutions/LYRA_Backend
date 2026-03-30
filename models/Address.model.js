@@ -29,14 +29,14 @@ const addressSchema = new mongoose.Schema(
 );
 
 // Ensure only one default address per user
-addressSchema.pre("save", async function (next) {
-  if (this.isDefault && this.isModified("isDefault")) {
-    await this.constructor.updateMany(
-      { user: this.user, _id: { $ne: this._id } },
-      { $set: { isDefault: false } }
-    );
-  }
-  next();
-});
+// addressSchema.pre("save", async function (next) {
+//   if (this.isDefault && this.isModified("isDefault")) {
+//     await this.constructor.updateMany(
+//       { user: this.user, _id: { $ne: this._id } },
+//       { $set: { isDefault: false } }
+//     );
+//   }
+//   next();
+// });
 
 export default mongoose.model("Address", addressSchema);

@@ -12,12 +12,27 @@ import addressRoutes from "./routes/Address.routes.js";
 import orderRoutes from "./routes/Order.routes.js";
 import couponRoutes from "./routes/Coupon.routes.js";
 
+import { 
+  adminGetAllOrders,
+  adminUpdateOrderStatus
+ } from "./controllers/Order.controller.js";
+
+import { seedCoupons } from "./controllers/Coupon.controller.js";
+
+
 dotenv.config();
 
 const app = express();
 
-app.use(cors({ origin: "http://localhost:5173", credentials: true }));
-app.use(express.json());
+app.use(cors({ 
+  origin: [ 
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "http://localhost:4173",
+  ],
+
+   credentials: true }));
+app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api/users", userRoutes);
@@ -25,7 +40,7 @@ app.use("/api/users", authRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/wishlist", wishlistRoutes);
 app.use("/api/cart", cartRoutes);
-app.use("/api/banners", bannerRoutes);
+app.use("/api/admin/banners", bannerRoutes);
 app.use("/api/addresses", addressRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/coupons", couponRoutes);

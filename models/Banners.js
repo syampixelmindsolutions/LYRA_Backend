@@ -4,9 +4,9 @@ const bannerSchema = new mongoose.Schema(
   {
     title: {
       type: String,
-      required: true,
+      required: [true, "Title is required"],
       trim: true,
-      maxlength: 50
+      maxlength: [50, "Title cannot exceed 50 characters"]
     },
     subtitle: {
       type: String,
@@ -15,7 +15,7 @@ const bannerSchema = new mongoose.Schema(
     },
     image: {
       type: String,
-      required: true,
+      required: [true, "Image URL is required"],
       trim: true
     },
     link: {
