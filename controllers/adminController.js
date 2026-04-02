@@ -1,5 +1,6 @@
 import Product from "../models/product.js";
 import Order from "../models/Order.model.js";
+import User from "../models/User.js";
 
 export const saveProduct = async (req, res) => {
   try {
@@ -44,7 +45,7 @@ export const updateOrder = async (req, res) => {
   const updated = await Order.findByIdAndUpdate(
     req.params.id,
     { status: req.body.status },
-    { new: true }
+    { returnDocument: "after" }
   );
   res.json(updated);
 };

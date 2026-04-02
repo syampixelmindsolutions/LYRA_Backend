@@ -56,7 +56,7 @@ export const placeOrder = async (req, res) => {
           if (db) { lockedPrice = db.price; lockedOriginalPrice = db.originalPrice || db.price; }
         } catch { /* use frontend price */ }
       }
- 
+
       computedSubtotal += lockedPrice * Number(item.quantity);
       orderItems.push({
         product: item.product || undefined,
@@ -83,7 +83,7 @@ export const placeOrder = async (req, res) => {
       estimatedDelivery: new Date(Date.now() + 7 * 86400000),
     });
  
-    await Cart.findOneAndUpdate({ user: req.user._id }, { $set: { items: [] } });
+    await Cart.findOneAndUpdate({ user: req.user._id }, { $set: { items: [] } }, { returnDocument: "after" });
  
     return res.status(201).json({
       message: "Order placed successfully",
@@ -97,10 +97,6 @@ export const placeOrder = async (req, res) => {
     res.status(500).json({ error: err.message || "Failed to place order" });
   }
 };
- 
-// ─────────────────────────────────────────────────────────────────────
-// GET /api/orders/my  — user's own orders, newest first
-// ─────────────────────────────────────────────────────────────────────
 export const getMyOrders = async (req, res) => {
   try {
     const orders = await Order.find({ user: req.user._id }).sort({ createdAt: -1 }).lean();
@@ -111,11 +107,7 @@ export const getMyOrders = async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-};
- 
-// ─────────────────────────────────────────────────────────────────────
-// GET /api/orders/:id  — single order (must belong to requesting user)
-// ─────────────────────────────────────────────────────────────────────
+};s
 export const getOrderById = async (req, res) => {
   try {
     const order = await Order.findOne({ _id: req.params.id, user: req.user._id }).lean();
@@ -137,113 +129,12 @@ export const cancelOrder = async (req, res) => {
       return res.status(400).json({ error: `Cannot cancel an order with status "${order.status}"` });
  
     order.status       = "Cancelled";
-    order.cancelReason = req.body.reason || "Cancelled by customer";
+    order.cancelReason = req.body.reason || "Cancelled by user";
     order.cancelledAt  = new Date();
-    order.statusTimeline.push({ status: "Cancelled", message: req.body.reason || "Cancelled by customer", timestamp: new Date() });
+    order.statusTimeline.push({ status: "Cancelled", message: req.body.reason || "Cancelled by user", timestamp: new Date() });
     await order.save();
     res.json({ message: "Order cancelled", order });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
- 
-// ════════════════════════════════════════════════════════════════════
-// ADMIN ROUTES
-// ════════════════════════════════════════════════════════════════════
- 
-// ─────────────────────────────────────────────────────────────────────
-// GET /api/admin/orders  — all orders with full customer + item data
-// Returns enriched orders suitable for admin panel table + expandable rows
-// ─────────────────────────────────────────────────────────────────────
-export const adminGetAllOrders = async (req, res) => {
-  try {
-    const orders = await Order.find()
-      .populate("user", "fullName email mobileNumber createdAt")
-      .sort({ createdAt: -1 })
-      .lean();
- 
-    const enriched = orders.map((o) => ({
-      ...o,
-      orderNumber:    "LYR" + o._id.toString().slice(-8).toUpperCase(),
-      userName:   o.user?.fullName || o.address?.fullName || "Unknown",
-      userEmail:  o.user?.email || "",
-      userPhone:  o.user?.mobileNumber || o.address?.phone || "",
-      userId:     o.user?._id || null,
-      // Safe item count (never render the array directly in JSX)
-      itemCount:      Array.isArray(o.items) ? o.items.length : 0,
-    }));
- 
-    res.json(enriched);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
- 
-// ─────────────────────────────────────────────────────────────────────
-// PUT /api/admin/orders/:id  — update delivery status
-// body: { status: "Pending"|"Processing"|"Shipped"|"Delivered"|"Cancelled" }
-// Automatically marks COD as paid when Delivered
-// ─────────────────────────────────────────────────────────────────────
-export const adminUpdateOrderStatus = async (req, res) => {
-  try {
-    const { status } = req.body;
-    const validStatuses = ["Pending", "Processing", "Shipped", "Delivered", "Cancelled"];
-    if (!validStatuses.includes(status))
-      return res.status(400).json({ error: `Invalid status: ${status}` });
- 
-    const order = await Order.findById(req.params.id);
-    if (!order) return res.status(404).json({ error: "Order not found" });
- 
-    order.status = status;
-    order.statusTimeline.push({ status, message: `Status updated to ${status} by admin`, timestamp: new Date() });
- 
-    // Auto-mark COD as paid on delivery
-    if (status === "Delivered" && order.paymentMethod === "cod") {
-      order.paymentStatus = "paid";
-    }
-    // Auto-mark as refunded on cancel if already paid
-    if (status === "Cancelled" && order.paymentStatus === "paid") {
-      order.paymentStatus = "refunded";
-    }
- 
-    await order.save();
-    res.json({
-      message: "Order status updated",
-      order: { ...order.toJSON(), orderNumber: "LYR" + order._id.toString().slice(-8).toUpperCase() },
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
- 
-// ─────────────────────────────────────────────────────────────────────
-// PATCH /api/admin/orders/:id/payment  — update payment status only
-// body: { paymentStatus: "pending"|"paid"|"failed"|"refunded" }
-// ─────────────────────────────────────────────────────────────────────
-export const adminUpdatePaymentStatus = async (req, res) => {
-  try {
-    const { paymentStatus } = req.body;
-    const validPayment = ["pending", "paid", "failed", "refunded"];
-    if (!validPayment.includes(paymentStatus))
-      return res.status(400).json({ error: `Invalid paymentStatus: ${paymentStatus}` });
- 
-    const order = await Order.findById(req.params.id);
-    if (!order) return res.status(404).json({ error: "Order not found" });
- 
-    order.paymentStatus = paymentStatus;
-    order.statusTimeline.push({
-      status:    order.status,
-      message:   `Payment status updated to ${paymentStatus} by admin`,
-      timestamp: new Date(),
-    });
- 
-    await order.save();
-    res.json({
-      message: "Payment status updated",
-      order: { ...order.toJSON(), orderNumber: "LYR" + order._id.toString().slice(-8).toUpperCase() },
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
- 
