@@ -107,7 +107,7 @@ export const getMyOrders = async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-};s
+};
 export const getOrderById = async (req, res) => {
   try {
     const order = await Order.findOne({ _id: req.params.id, user: req.user._id }).lean();
