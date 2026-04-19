@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 import cors from "cors";
 
 // routes
-import { authRoutes } from "../routes/authRoutes.js";
+import authRoutes from "../routes/authRoutes.js";
 import userRoutes from "../routes/userRoutes.js";
 import adminRoutes from "../routes/adminRoutes.js";
 import wishlistRoutes from "../routes/wishlistRoutes.js";
